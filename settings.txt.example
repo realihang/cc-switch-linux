@@ -1,0 +1,28 @@
+#AccountName
+##ModelName (Rate)
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://your-api-endpoint.example.com/v1",
+    "ANTHROPIC_AUTH_TOKEN": "your-token-here"
+  },
+  "model": "sonnet[1m]"
+}
+
+##AnotherModel (2x)
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://your-api-endpoint.example.com/v1",
+    "ANTHROPIC_AUTH_TOKEN": "another-token-here"
+  },
+  "model": "sonnet[1m]"
+}
+
+#WorkAccount
+##Premium API
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://another-endpoint.example.com/v1",
+    "ANTHROPIC_AUTH_TOKEN": "work-token-here"
+  },
+  "model": "sonnet[1m]"
+}

@@ -1,0 +1,29 @@
+{
+  "name": "cc-switch-linux",
+  "version": "1.0.0",
+  "description": "An interactive terminal UI for managing multiple Claude API configurations on Linux",
+  "main": "claude_manager.js",
+  "scripts": {
+    "switch": "node claude_manager.js switch",
+    "change": "node claude_manager.js change"
+  },
+  "keywords": [
+    "claude",
+    "anthropic",
+    "api",
+    "manager",
+    "tui",
+    "linux",
+    "cli"
+  ],
+  "author": "LiHang-CV",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LiHang-CV/cc-switch-linux.git"
+  },
+  "homepage": "https://github.com/LiHang-CV/cc-switch-linux#readme",
+  "engines": {
+    "node": ">=14"
+  }
+}
