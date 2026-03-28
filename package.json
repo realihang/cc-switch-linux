@@ -4,6 +4,7 @@
   "description": "An interactive terminal UI for managing multiple Claude API configurations on Linux",
   "main": "claude_manager.js",
   "scripts": {
+    "setup": "node setup_check.js",
     "switch": "node claude_manager.js switch",
     "change": "node claude_manager.js change"
   },

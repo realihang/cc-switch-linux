@@ -50,14 +50,24 @@
    git clone https://github.com/realihang/cc-switch-linux.git
    ```
 
-2. **Copy the script to your Claude config directory**
+2. **Run the setup check** (first-time only)
+
+   ```bash
+   node cc-switch-linux/setup_check.js
+   ```
+
+   This script inspects your existing environment for any prior Claude configuration
+   (`ANTHROPIC_*` env vars, `~/.claude/settings.json`) and handles it automatically:
+
+   - If legacy config is found → extracts it into `~/.claude/settings.txt` and clears
+     the API credentials from `settings.json` (all other settings are preserved)
+   - If no legacy config → creates an empty `~/.claude/settings.txt` ready for use
+
+3. **Copy the script to your Claude config directory**
 
    ```bash
    cp cc-switch-linux/claude_manager.js ~/.claude/
    ```
-
-3. **Create your `settings.txt`** in `~/.claude/`
-   See [`settings.txt.example`](settings.txt.example) for the format.
 
 4. **Add aliases to `~/.bashrc`**
 
@@ -136,14 +146,22 @@ cchange    # Open Change UI — manage accounts & APIs
    git clone https://github.com/realihang/cc-switch-linux.git
    ```
 
-2. **将脚本复制到 Claude 配置目录**
+2. **运行自检脚本**（仅首次）
+
+   ```bash
+   node cc-switch-linux/setup_check.js
+   ```
+
+   该脚本会检查系统中是否存在旧的 Claude 配置（`ANTHROPIC_*` 环境变量、`~/.claude/settings.json`），并自动处理：
+
+   - 若发现旧配置 → 提取至 `~/.claude/settings.txt`，并清除 `settings.json` 中的 API 凭据（其他配置保留）
+   - 若无旧配置 → 创建空的 `~/.claude/settings.txt`，可直接使用
+
+3. **将脚本复制到 Claude 配置目录**
 
    ```bash
    cp cc-switch-linux/claude_manager.js ~/.claude/
    ```
-
-3. **在 `~/.claude/` 创建 `settings.txt`**
-   格式参见 [`settings.txt.example`](settings.txt.example)。
 
 4. **在 `~/.bashrc` 添加别名**
 
@@ -195,6 +213,12 @@ cchange    # 打开管理 UI，管理账户和 API
 <a id="changelog"></a>
 
 ## Changelog
+
+### v1.2.0 — 2026-03-28
+
+- **setup_check.js** — First-run self-check script: detects legacy `ANTHROPIC_*` env vars and `settings.json` API credentials, migrates them into `settings.txt`, and clears conflicts automatically
+- `claude_manager.js` no longer responsible for creating `settings.txt`
+- `npm run setup` alias added to `package.json`
 
 ### v1.1.0 — 2026-03-28
 
