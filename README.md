@@ -84,6 +84,7 @@ cchange    # Open Change UI — manage accounts & APIs
 | `↑` / `↓` | Navigate |
 | `Enter` | Select / Confirm |
 | `Esc` | Go back / Cancel |
+| `F2` | Rename (Change mode only) |
 | `Ctrl+C` | Exit |
 
 ### `settings.txt` Format
@@ -169,6 +170,7 @@ cchange    # 打开管理 UI，管理账户和 API
 | `↑` / `↓` | 上下导航 |
 | `Enter` | 确认选择 |
 | `Esc` | 返回 / 取消 |
+| `F2` | 重命名（仅 Change 模式）|
 | `Ctrl+C` | 退出 |
 
 ### `settings.txt` 格式
@@ -193,6 +195,12 @@ cchange    # 打开管理 UI，管理账户和 API
 <a id="changelog"></a>
 
 ## Changelog
+
+### v1.1.0 — 2026-03-28
+
+- **F2 Rename** — Press `F2` in Change mode to rename accounts or API entries
+- **CJK character width fix** — Proper visual alignment for Chinese/Japanese/Korean characters
+- Dynamic help bar — Shows mode-specific keyboard shortcuts
 
 ### v1.0.0 — 2026-03-27
 

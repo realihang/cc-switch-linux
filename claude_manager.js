@@ -102,6 +102,14 @@ let state = {
 
 const ACTIONS = ['Update', 'Delete'];
 
+function getStrWidth(str) {
+    let width = 0;
+    for (let i = 0; i < str.length; i++) {
+        width += str.charCodeAt(i) > 255 ? 2 : 1;
+    }
+    return width;
+}
+
 function buildItemStr(item, pointerCol, symbolType, textCol) {
     if (!item) return { str: '', len: 0 };
     
@@ -120,13 +128,18 @@ function buildItemStr(item, pointerCol, symbolType, textCol) {
     if (textCol === 'red') tStr = `\x1b[31m${item.text}\x1b[0m`;
     if (textCol === 'white') tStr = `\x1b[0m${item.text}\x1b[0m`;
     
-    return { str: `${pStr}${sStr}${tStr}`, len: 4 + item.text.length };
+    const visualLength = getStrWidth(item.text);
+    
+    return { str: `${pStr}${sStr}${tStr}`, len: 4 + visualLength };
 }
 
 function render() {
     console.clear();
     console.log(`=========== Claude API Manager [Mode: ${MODE === 'SWITCH' ? 'Switch' : 'Change'}] ===========`);
-    console.log('[\u2191/\u2193]Move [Enter] Select [Esc] Back/Cancel [Ctrl+C] Exit\n');
+    const helpText = MODE === 'CHANGE' 
+        ? '[\u2191/\u2193]Move [Enter/Esc/F2] Select/Back/Rename [Ctrl+C] Exit' 
+        : '[\u2191/\u2193]Move [Enter] Select [Esc] Back/Cancel [Ctrl+C] Exit';
+    console.log(`${helpText}\n`);
 
     const activeStatus = getActiveConfig();
 
@@ -360,6 +373,32 @@ async function finishApiConfig(selectedUrl) {
 
 async function handleKeypress(str, key) {
     if (key.ctrl && key.name === 'c') process.exit();
+    if (key.name === 'f2') {
+        if (MODE !== 'CHANGE') return;
+
+        if (state.focus === 'LEFT') {
+            if (state.leftIdx < accounts.length) {
+                const oldName = accounts[state.leftIdx].name;
+                const newName = await promptText(`Rename user [\x1b[36m${oldName}\x1b[0m] to: `);
+                if (newName) {
+                    accounts[state.leftIdx].name = newName;
+                    saveAccounts(accounts);
+                }
+                render();
+            }
+        } else if (state.focus === 'RIGHT') {
+            if (accounts[state.leftIdx] && state.rightIdx < accounts[state.leftIdx].apis.length) {
+                const oldName = accounts[state.leftIdx].apis[state.rightIdx].name;
+                const newName = await promptText(`Rename API [\x1b[36m${oldName}\x1b[0m] to: `);
+                if (newName) {
+                    accounts[state.leftIdx].apis[state.rightIdx].name = newName;
+                    saveAccounts(accounts);
+                }
+                render();
+            }
+        }
+        return;
+    }
 
     const isChange = MODE === 'CHANGE';
     const leftCount = accounts.length + (isChange ? 1 : 1); 
