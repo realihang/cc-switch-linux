@@ -47,7 +47,7 @@
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/LiHang-CV/cc-switch-linux.git
+   git clone https://github.com/lihang1011/cc-switch-linux.git
    ```
 
 2. **Copy the script to your Claude config directory**
@@ -132,7 +132,7 @@ cchange    # Open Change UI — manage accounts & APIs
 1. **克隆仓库**
 
    ```bash
-   git clone https://github.com/LiHang-CV/cc-switch-linux.git
+   git clone https://github.com/lihang1011/cc-switch-linux.git
    ```
 
 2. **将脚本复制到 Claude 配置目录**
