@@ -32,9 +32,11 @@
 
 - **Switch Mode** (`ccswitch`) — quickly activate any stored API configuration
 - **Change Mode** (`cchange`) — add / update / delete accounts and API entries
+- **Show** (`ccshow`) — decrypt and display stored settings (machine-bound)
+- **Encrypt** (`ccpasswd`) — encrypt `settings.txt` → `settings.enc`, then remove plaintext
 - Keyboard-driven TUI: `↑ ↓ Enter Esc Ctrl+C`
 - Multi-account support, each with multiple API entries
-- Human-readable `settings.txt` storage; `settings.json` is never touched by hand
+- AES-256-GCM encryption — settings encrypted at rest, key derived from machine identity
 
 ### Requirements
 
@@ -74,6 +76,8 @@
    ```bash
    alias ccswitch="node ~/.claude/claude_manager.js switch"
    alias cchange="node ~/.claude/claude_manager.js change"
+   alias ccshow="node ~/.claude/claude_manager.js show"
+   alias ccpasswd="node ~/.claude/claude_manager.js passwd"
    ```
 
 5. **Reload your shell**
@@ -87,6 +91,8 @@
 ```bash
 ccswitch   # Open Switch UI — pick the active API
 cchange    # Open Change UI — manage accounts & APIs
+ccshow     # Decrypt and print stored settings to stdout
+ccpasswd   # Encrypt settings.txt → settings.enc (if .txt exists)
 ```
 
 | Key | Action |
@@ -128,9 +134,11 @@ cchange    # Open Change UI — manage accounts & APIs
 
 - **切换模式**（`ccswitch`）— 快速激活任意已存储的 API 配置
 - **管理模式**（`cchange`）— 增加 / 更新 / 删除账户和 API 条目
+- **查看**（`ccshow`）— 解密并显示已存储的配置明文
+- **加密**（`ccpasswd`）— 将 `settings.txt` 加密为 `settings.enc` 并删除明文
 - 键盘驱动 TUI：`↑ ↓ Enter Esc Ctrl+C`
 - 支持多账户，每个账户可配置多条 API
-- `settings.txt` 以人类可读格式存储；`settings.json` 无需手动修改
+- AES-256-GCM 加密 — 配置静态加密，密钥绑定机器身份
 
 ### 环境要求
 
@@ -168,6 +176,8 @@ cchange    # Open Change UI — manage accounts & APIs
    ```bash
    alias ccswitch="node ~/.claude/claude_manager.js switch"
    alias cchange="node ~/.claude/claude_manager.js change"
+   alias ccshow="node ~/.claude/claude_manager.js show"
+   alias ccpasswd="node ~/.claude/claude_manager.js passwd"
    ```
 
 5. **重新加载 Shell**
@@ -181,6 +191,8 @@ cchange    # Open Change UI — manage accounts & APIs
 ```bash
 ccswitch   # 打开切换 UI，选择当前激活的 API
 cchange    # 打开管理 UI，管理账户和 API
+ccshow     # 解密并打印已存储的配置明文
+ccpasswd   # 将 settings.txt 加密为 settings.enc（如 .txt 存在）
 ```
 
 | 按键 | 操作 |
@@ -213,6 +225,15 @@ cchange    # 打开管理 UI，管理账户和 API
 <a id="changelog"></a>
 
 ## Changelog
+
+### v1.3.0 — 2026-03-29
+
+- **AES-256-GCM encryption** — Settings encrypted at rest with a key derived from machine identity (`/etc/machine-id` + username + home dir)
+- **`ccshow`** — Decrypt and display stored settings to stdout (machine-bound, portable key)
+- **`ccpasswd`** — Manually encrypt `settings.txt` → `settings.enc` and remove plaintext
+- **`setup_check.js`** — New `[4/4]` step: auto-encrypts `settings.txt` if it contains API content, migrates legacy `settings.key` to bundled format
+- Two-layer encryption: machine key wraps a random data key for forward secrecy
+- Encrypted settings stored as single `settings.enc` file (key bundled inside)
 
 ### v1.2.0 — 2026-03-28
 

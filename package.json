@@ -1,12 +1,14 @@
 {
   "name": "cc-switch-linux",
-  "version": "1.1.0",
+  "version": "1.3.0",
   "description": "An interactive terminal UI for managing multiple Claude API configurations on Linux",
   "main": "claude_manager.js",
   "scripts": {
     "setup": "node setup_check.js",
     "switch": "node claude_manager.js switch",
-    "change": "node claude_manager.js change"
+    "change": "node claude_manager.js change",
+    "show": "node claude_manager.js show",
+    "passwd": "node claude_manager.js passwd"
   },
   "keywords": [
     "claude",
@@ -15,15 +17,17 @@
     "manager",
     "tui",
     "linux",
-    "cli"
+    "cli",
+    "encryption",
+    "aes-256-gcm"
   ],
-  "author": "LiHang-CV",
+  "author": "realihang",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/LiHang-CV/cc-switch-linux.git"
+    "url": "https://github.com/realihang/cc-switch-linux.git"
   },
-  "homepage": "https://github.com/LiHang-CV/cc-switch-linux#readme",
+  "homepage": "https://github.com/realihang/cc-switch-linux#readme",
   "engines": {
     "node": ">=14"
   }
