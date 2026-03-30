@@ -34,6 +34,7 @@
 - **Change Mode** (`cchange`) — add / update / delete accounts and API entries
 - **Show** (`ccshow`) — decrypt and display stored settings (machine-bound)
 - **Encrypt** (`ccpasswd`) — encrypt `settings.txt` → `settings.enc`, then remove plaintext
+- **Model List** — define a shared model list in `settings.txt`; select the active model directly from the TUI
 - Keyboard-driven TUI: `↑ ↓ Enter Esc Ctrl+C`
 - Multi-account support, each with multiple API entries
 - AES-256-GCM encryption — settings encrypted at rest, key derived from machine identity
@@ -106,16 +107,22 @@ ccpasswd   # Encrypt settings.txt → settings.enc (if .txt exists)
 ### `settings.txt` Format
 
 ```
+@models
+Claude Sonnet 4.5:claude-sonnet-4-5,Claude Haiku 4.5:claude-haiku-4-5
+
 #AccountName
-##Model Name & Rate (e.g. Claude 4.75x)
+##API Entry Name (e.g. Claude 4.75x)
 {
   "env": {
     "ANTHROPIC_BASE_URL": "https://your-api-endpoint/v1",
     "ANTHROPIC_AUTH_TOKEN": "your-token-here"
-  },
-  "model": "sonnet[1m]"
+  }
 }
 ```
+
+> **`@models`** *(optional)* — defines the selectable model list shown in the TUI.
+> Format: comma-separated `DisplayName:model-value` pairs.
+> Models can be switched independently of account credentials.
 
 > ⚠️ **Never commit `settings.txt` or `settings.json`** — they contain your API tokens.
 > Both files are already listed in `.gitignore`.
@@ -136,6 +143,7 @@ ccpasswd   # Encrypt settings.txt → settings.enc (if .txt exists)
 - **管理模式**（`cchange`）— 增加 / 更新 / 删除账户和 API 条目
 - **查看**（`ccshow`）— 解密并显示已存储的配置明文
 - **加密**（`ccpasswd`）— 将 `settings.txt` 加密为 `settings.enc` 并删除明文
+- **模型列表** — 在 `settings.txt` 中定义共享模型列表；可直接在 TUI 中选择当前激活的模型
 - 键盘驱动 TUI：`↑ ↓ Enter Esc Ctrl+C`
 - 支持多账户，每个账户可配置多条 API
 - AES-256-GCM 加密 — 配置静态加密，密钥绑定机器身份
@@ -206,16 +214,22 @@ ccpasswd   # 将 settings.txt 加密为 settings.enc（如 .txt 存在）
 ### `settings.txt` 格式
 
 ```
+@models
+模型显示名1:claude-sonnet-4-5,模型显示名2:claude-haiku-4-5
+
 #账户名称
-##模型名称与倍率（如 Claude 4.75x）
+##API 条目名称（如 Claude 4.75x）
 {
   "env": {
     "ANTHROPIC_BASE_URL": "https://your-api-endpoint/v1",
     "ANTHROPIC_AUTH_TOKEN": "your-token-here"
-  },
-  "model": "sonnet[1m]"
+  }
 }
 ```
+
+> **`@models`** *（可选）* — 定义 TUI 中可选的模型列表。
+> 格式：逗号分隔的 `显示名称:模型字符串` 键値对。
+> 模型可独立于账户凭据进行切换。
 
 > ⚠️ **永远不要提交 `settings.txt` 或 `settings.json`** — 它们包含你的 API 令牌。
 > 这两个文件已写入 `.gitignore`。
@@ -228,12 +242,11 @@ ccpasswd   # 将 settings.txt 加密为 settings.enc（如 .txt 存在）
 
 ### v1.3.0 — 2026-03-29
 
-- **AES-256-GCM encryption** — Settings encrypted at rest with a key derived from machine identity (`/etc/machine-id` + username + home dir)
-- **`ccshow`** — Decrypt and display stored settings to stdout (machine-bound, portable key)
-- **`ccpasswd`** — Manually encrypt `settings.txt` → `settings.enc` and remove plaintext
-- **`setup_check.js`** — New `[4/4]` step: auto-encrypts `settings.txt` if it contains API content, migrates legacy `settings.key` to bundled format
-- Two-layer encryption: machine key wraps a random data key for forward secrecy
-- Encrypted settings stored as single `settings.enc` file (key bundled inside)
+- **Model List** — define a shared model list in `settings.txt`; select the active model directly from the TUI
+- **AES-256-GCM encryption** — settings encrypted at rest; encrypted file is machine-bound
+- **`ccshow`** — decrypt and display stored settings to stdout
+- **`ccpasswd`** — manually encrypt `settings.txt` → `settings.enc` and remove plaintext
+- **`setup_check.js`** — new `[4/4]` step: auto-encrypts `settings.txt` on first run
 
 ### v1.2.0 — 2026-03-28
 

@@ -1,20 +1,21 @@
+@models
+Claude Sonnet 4.5:claude-sonnet-4-5,Claude Haiku 4.5:claude-haiku-4-5
+
 #AccountName
-##ModelName (Rate)
+##Premium API (4.75x)
 {
   "env": {
     "ANTHROPIC_BASE_URL": "https://your-api-endpoint.example.com/v1",
     "ANTHROPIC_AUTH_TOKEN": "your-token-here"
-  },
-  "model": "sonnet[1m]"
+  }
 }
 
-##AnotherModel (2x)
+##AnotherAPI (2x)
 {
   "env": {
     "ANTHROPIC_BASE_URL": "https://your-api-endpoint.example.com/v1",
     "ANTHROPIC_AUTH_TOKEN": "another-token-here"
-  },
-  "model": "sonnet[1m]"
+  }
 }
 
 #WorkAccount
@@ -23,6 +24,5 @@
   "env": {
     "ANTHROPIC_BASE_URL": "https://another-endpoint.example.com/v1",
     "ANTHROPIC_AUTH_TOKEN": "work-token-here"
-  },
-  "model": "sonnet[1m]"
+  }
 }
