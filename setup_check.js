@@ -1,35 +1,10 @@
 const fs     = require('fs');
 const path   = require('path');
 const os     = require('os');
-const crypto = require('crypto');
 
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const JSON_PATH  = path.join(CLAUDE_DIR, 'settings.json');
 const TXT_PATH   = path.join(CLAUDE_DIR, 'settings.txt');
-const ENC_PATH   = path.join(CLAUDE_DIR, 'settings.enc');
-
-// ── Crypto: machine-bound AES-256-GCM ────────────────────────────────────────
-function getMachineId() {
-    try { return fs.readFileSync('/etc/machine-id', 'utf-8').trim(); }
-    catch { try { return fs.readFileSync('/var/lib/dbus/machine-id', 'utf-8').trim(); }
-    catch { return 'fallback-' + os.hostname(); } }
-}
-function deriveMachineKey() {
-    return crypto.createHash('sha256')
-        .update(`${getMachineId()}:${os.userInfo().username}:${os.homedir()}`).digest();
-}
-function encryptAesGcm(key, buf) {
-    const iv = crypto.randomBytes(12);
-    const c = crypto.createCipheriv('aes-256-gcm', key, iv);
-    const enc = Buffer.concat([c.update(buf), c.final()]);
-    return { iv: iv.toString('base64'), tag: c.getAuthTag().toString('base64'), data: enc.toString('base64') };
-}
-function encryptToFile(plaintext, filePath) {
-    const mk = deriveMachineKey();
-    const dk = crypto.randomBytes(32);
-    const bundle = { key: encryptAesGcm(mk, dk), settings: encryptAesGcm(dk, Buffer.from(plaintext, 'utf-8')) };
-    fs.writeFileSync(filePath, JSON.stringify(bundle), { mode: 0o600 });
-}
 
 const RESET  = '\x1b[0m';
 const BOLD   = '\x1b[1m';
@@ -62,14 +37,7 @@ function readSettingsJson() {
 }
 
 function buildSettingsTxtEntry(url, token, source) {
-    const config = {
-        env: {
-            ANTHROPIC_BASE_URL:   url   || '',
-            ANTHROPIC_AUTH_TOKEN: token || ''
-        },
-        model: 'sonnet[1m]'
-    };
-    return `#LegacyAccount\n##Imported from ${source}\n${JSON.stringify(config, null, 2)}\n`;
+    return `#LegacyAccount\n##Imported from ${source}\n${url || ''},${token || ''}\n`;
 }
 
 function clearEnvFromSettings(data) {
@@ -77,7 +45,6 @@ function clearEnvFromSettings(data) {
     if (cleaned.env) {
         delete cleaned.env.ANTHROPIC_BASE_URL;
         delete cleaned.env.ANTHROPIC_AUTH_TOKEN;
-        // remove env block entirely if now empty
         if (Object.keys(cleaned.env).length === 0) delete cleaned.env;
     }
     return cleaned;
@@ -91,7 +58,7 @@ function main() {
     console.log();
 
     // ── Section 1: Environment variables ─────────────────────────────────────
-    console.log(`${BOLD}[1/4] Checking environment variables${RESET}`);
+    console.log(`${BOLD}[1/3] Checking environment variables${RESET}`);
     sep();
     const envVars = checkEnvVars();
     let envHasConfig = false;
@@ -107,7 +74,7 @@ function main() {
     }
     console.log();
 
-    console.log(`${BOLD}[2/4] Checking ~/.claude/settings.json${RESET}`);
+    console.log(`${BOLD}[2/3] Checking ~/.claude/settings.json${RESET}`);
     sep();
     const { exists: jsonExists, data: jsonData, parseError } = readSettingsJson();
 
@@ -133,7 +100,7 @@ function main() {
     }
     console.log();
 
-    console.log(`${BOLD}[3/4] Preparing settings.txt${RESET}`);
+    console.log(`${BOLD}[3/3] Preparing settings.txt${RESET}`);
     sep();
 
     const txtExists = fs.existsSync(TXT_PATH);
@@ -141,9 +108,6 @@ function main() {
     if (txtExists) {
         ok(`settings.txt already exists: ${TXT_PATH}`);
         info('Skipping creation — not overwriting existing file.');
-        console.log();
-    } else if (fs.existsSync(ENC_PATH)) {
-        ok('settings.enc already exists — skipping plaintext creation.');
         console.log();
     } else if (jsonHasConfig || envHasConfig) {
         const legacyUrl   = jsonUrl   || envVars.url   || '';
@@ -155,6 +119,7 @@ function main() {
         ok(`Legacy config extracted → settings.txt created: ${TXT_PATH}`);
         info(`  Source: ${source}`);
         info(`  Account: LegacyAccount / "Imported from ${source}"`);
+        info(`  Format: plaintext (v2.0) — url,token per API line`);
 
         if (jsonHasConfig && jsonData) {
             const cleaned = clearEnvFromSettings(jsonData);
@@ -170,51 +135,13 @@ function main() {
         console.log();
     }
 
-    // ── Section 4: Encryption ──────────────────────────────────────────────
-    console.log(`${BOLD}[4/4] Encrypting settings${RESET}`);
-    sep();
-
-    const encExists = fs.existsSync(ENC_PATH);
-    const txtContent = fs.existsSync(TXT_PATH) ? fs.readFileSync(TXT_PATH, 'utf-8').trim() : '';
-    const txtHasApi = txtContent.length > 0 && (txtContent.includes('sk-') || txtContent.includes('http'));
-
-    if (encExists) {
-        ok('settings.enc already exists. Encryption is active.');
-        info('Skipping — not re-encrypting.');
-        // Clean up old settings.key if present (migrated from two-file format)
-        const oldKeyPath = path.join(CLAUDE_DIR, 'settings.key');
-        if (fs.existsSync(oldKeyPath)) { fs.unlinkSync(oldKeyPath); info('Removed legacy settings.key (now bundled in settings.enc).'); }
-    } else if (txtHasApi) {
-        try {
-            encryptToFile(txtContent, ENC_PATH);
-            ok(`settings.txt encrypted → settings.enc: ${ENC_PATH}`);
-            fs.unlinkSync(TXT_PATH);
-            ok('settings.txt removed (migrated to encrypted storage).');
-        } catch (e) {
-            err(`Encryption failed: ${e.message}`);
-            info('settings.txt left untouched. You can retry later.');
-        }
-    } else if (txtContent.length === 0 && !encExists) {
-        info('settings.txt is empty — nothing to encrypt yet.');
-        info('claude_manager.js will encrypt automatically when you add API configs.');
-    } else {
-        info('No API content detected in settings.txt. Encryption will activate on first save.');
-    }
-    // Clean up old settings.key if present
-    const oldKeyPath2 = path.join(CLAUDE_DIR, 'settings.key');
-    if (fs.existsSync(oldKeyPath2)) { fs.unlinkSync(oldKeyPath2); }
-    console.log();
-
-
     console.log(`${BOLD}Summary${RESET}`);
     sep();
 
-    const encExistsNow = fs.existsSync(ENC_PATH);
     const txtExistsNow = fs.existsSync(TXT_PATH);
     const jsonExistsNow = fs.existsSync(JSON_PATH);
 
-    console.log(`  settings.enc  : ${encExistsNow  ? GREEN + 'ready' + RESET : YELLOW + 'pending' + RESET}  (${ENC_PATH})`);
-    console.log(`  settings.txt  : ${txtExistsNow  ? YELLOW + 'unencrypted' + RESET : GREEN + 'migrated' + RESET}  (${TXT_PATH})`);
+    console.log(`  settings.txt  : ${txtExistsNow  ? GREEN + 'ready' + RESET : YELLOW + 'pending' + RESET}  (${TXT_PATH})`);
     console.log(`  settings.json : ${jsonExistsNow ? GREEN + 'ready' + RESET : YELLOW + 'not found' + RESET}  (${JSON_PATH})`);
 
     if (envHasConfig) {
@@ -226,6 +153,7 @@ function main() {
     console.log();
     console.log(`${GREEN}${BOLD}Setup check complete.${RESET}`);
     console.log(`${DIM}Next steps: copy claude_manager.js to ~/.claude/ and add aliases to ~/.bashrc${RESET}`);
+    console.log(`${DIM}Storage: plaintext settings.txt (no encryption)${RESET}`);
     console.log();
 }
 

@@ -1,79 +1,15 @@
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
-const crypto = require('crypto');
-const os = require('os');
 
 const TXT_PATH = path.join(__dirname, 'settings.txt');
 const JSON_PATH = path.join(__dirname, 'settings.json');
-const ENC_PATH = path.join(__dirname, 'settings.enc');
 
-// -- Crypto: machine-bound AES-256-GCM --
-function getMachineId() {
-    try {
-        return fs.readFileSync('/etc/machine-id', 'utf-8').trim();
-    } catch {
-        try {
-            return fs.readFileSync('/var/lib/dbus/machine-id', 'utf-8').trim();
-        } catch {
-            return 'fallback-' + os.hostname();
-        }
-    }
-}
-
-function deriveMachineKey() {
-    const machineId = getMachineId();
-    const username = os.userInfo().username;
-    const homeDir = os.homedir();
-    return crypto.createHash('sha256').update(`${machineId}:${username}:${homeDir}`).digest();
-}
-
-function encryptAesGcm(key, plainBuf) {
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-    const enc = Buffer.concat([cipher.update(plainBuf), cipher.final()]);
-    const tag = cipher.getAuthTag();
-    return { iv: iv.toString('base64'), tag: tag.toString('base64'), data: enc.toString('base64') };
-}
-
-function decryptAesGcm(key, obj) {
-    const iv = Buffer.from(obj.iv, 'base64');
-    const tag = Buffer.from(obj.tag, 'base64');
-    const enc = Buffer.from(obj.data, 'base64');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(tag);
-    return Buffer.concat([decipher.update(enc), decipher.final()]);
-}
-
-
-function encryptToFile(plaintext, filePath) {
-    const mk = deriveMachineKey();
-    const dk = crypto.randomBytes(32);
-    const bundle = { key: encryptAesGcm(mk, dk), settings: encryptAesGcm(dk, Buffer.from(plaintext, 'utf-8')) };
-    fs.writeFileSync(filePath, JSON.stringify(bundle), { mode: 0o600 });
-}
-
-function decryptFromFile(filePath) {
-    const mk = deriveMachineKey();
-    const bundle = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    const dk = decryptAesGcm(mk, bundle.key);
-    return decryptAesGcm(dk, bundle.settings).toString('utf-8');
-}
-
+// -- Plaintext storage (no encryption) --
 
 function readPlaintext() {
     if (!fs.existsSync(TXT_PATH)) return null;
     return fs.readFileSync(TXT_PATH, 'utf-8');
-}
-
-function readEncrypted() {
-    if (!fs.existsSync(ENC_PATH)) return null;
-    try {
-        return decryptFromFile(ENC_PATH);
-    } catch (e) {
-        console.error('Decryption failed:', e.message);
-        return null;
-    }
 }
 
 function parseSettingsContent(content) {
@@ -136,27 +72,8 @@ function parseSettingsContent(content) {
 }
 
 function loadData() {
-    // Try encrypted first
-    let content = readEncrypted();
+    const content = readPlaintext();
     if (content !== null) return parseSettingsContent(content);
-
-    // Fallback to plaintext (backward compat for old users)
-    content = readPlaintext();
-    if (content !== null) {
-        const result = parseSettingsContent(content);
-        // Auto-migrate: encrypt the plaintext file
-        try {
-            const trimSource = content.trim();
-            if (trimSource.length > 0) {
-                encryptToFile(trimSource, ENC_PATH);
-                fs.unlinkSync(TXT_PATH);
-            }
-        } catch (e) {
-            // Migration failed softly - plaintext still usable
-        }
-        return result;
-    }
-
     return { accounts: [], models: [] };
 }
 
@@ -177,15 +94,7 @@ function saveData() {
     });
 
     const plaintext = out.trim() + '\n';
-
-    // Encrypt and write
-    try {
-        encryptToFile(plaintext, ENC_PATH);
-        if (fs.existsSync(TXT_PATH)) fs.unlinkSync(TXT_PATH);
-    } catch (e) {
-        console.error('Encryption failed, writing plaintext:', e.message);
-        fs.writeFileSync(TXT_PATH, plaintext, 'utf-8');
-    }
+    fs.writeFileSync(TXT_PATH, plaintext, 'utf-8');
 }
 
 function parseConfig(config) {
@@ -201,10 +110,6 @@ function getAllUrls() {
         if (url) urls.add(url);
     }));
     return Array.from(urls);
-}
-
-function getDefaultModel() {
-    return models.length > 0 ? models[0].value : 'sonnet[1m]';
 }
 
 function getActiveConfig() {
@@ -233,17 +138,18 @@ function getActiveConfig() {
     }
 }
 
-// ── Sub-commands: ccshow / ccpasswd ───────────────────────────────────────
+// -- Sub-commands: ccshow / ccpasswd --
+
 const _cmd = process.argv[2];
 
 if (_cmd === 'show') {
-    if (!fs.existsSync(ENC_PATH)) {
-        console.log('No encrypted settings found. (' + ENC_PATH + ')');
+    if (!fs.existsSync(TXT_PATH)) {
+        console.log('No settings found. (' + TXT_PATH + ')');
         process.exit(1);
     }
     try {
-        var plain = decryptFromFile(ENC_PATH);
-        var parsed = parseSettingsContent(plain);
+        var content = fs.readFileSync(TXT_PATH, 'utf-8');
+        var parsed = parseSettingsContent(content);
         var out = {};
         if (parsed.models && parsed.models.length > 0) {
             out._models = {};
@@ -263,60 +169,19 @@ if (_cmd === 'show') {
             out[acc.name] = apis;
         });
         var json = JSON.stringify(out, null, 2);
-        fs.writeFileSync(TXT_PATH, json + '\n', 'utf-8');
         console.log(json);
     } catch (e) {
-        console.error('Decryption failed:', e.message);
+        console.error('Read failed:', e.message);
         process.exit(1);
     }
     process.exit(0);
 }
 
 if (_cmd === 'passwd') {
-    if (!fs.existsSync(TXT_PATH)) {
-        console.log('No settings.txt found in ' + __dirname + ' \u2014 nothing to encrypt.');
-        process.exit(0);
-    }
-    try {
-        var content = fs.readFileSync(TXT_PATH, 'utf-8').trim();
-        if (content.length === 0) {
-            console.log('settings.txt is empty \u2014 removing.');
-            fs.unlinkSync(TXT_PATH);
-            process.exit(0);
-        }
-        var jsondata = JSON.parse(content);
-        var lines = [];
-        if (jsondata._models && typeof jsondata._models === 'object') {
-            lines.push('@models');
-            lines.push(Object.entries(jsondata._models).map(function(e) {
-                return e[0] + ':' + e[1];
-            }).join(','));
-            lines.push('');
-        }
-        Object.keys(jsondata).forEach(function(name) {
-            if (name === '_models') return;
-            var apis = jsondata[name];
-            if (!apis || typeof apis !== 'object') return;
-            lines.push('#' + name);
-            Object.entries(apis).forEach(function(entry) {
-                var cfg = entry[1];
-                var url = cfg.ANTHROPIC_BASE_URL || '';
-                var token = cfg.ANTHROPIC_AUTH_TOKEN || '';
-                lines.push('##' + entry[0]);
-                lines.push(url + ',' + token);
-                lines.push('');
-            });
-        });
-        encryptToFile(lines.join('\n'), ENC_PATH);
-        fs.unlinkSync(TXT_PATH);
-        console.log('✅ settings.txt encrypted → settings.enc');
-        console.log('✅ settings.txt removed');
-    } catch (e) {
-        console.error('Failed:', e.message);
-        process.exit(1);
-    }
+    console.log('passwd is no longer needed - settings are stored in plaintext.');
     process.exit(0);
 }
+
 const MODE = process.argv[2] === 'change' ? 'CHANGE' : 'SWITCH';
 const data = loadData();
 let accounts = data.accounts;
@@ -328,7 +193,11 @@ let state = {
     leftIdx: 0,
     rightIdx: 0,
     actionIdx: 0,
-    urlIdx: 0
+    urlIdx: 0,
+    // When in SWITCH mode and user selected an API, we store it here
+    // and redirect to model list for user to pick a model
+    pendingSwitch: null,
+    reorderMode: false  // 'm' key toggles: reorder accounts/apis/models with arrow keys
 };
 
 const ACTIONS = ['Update', 'Delete'];
@@ -371,11 +240,19 @@ function isModelListIdx() {
 
 function render() {
     console.clear();
-    console.log(`=========== Claude API Manager [Mode: ${MODE === 'SWITCH' ? 'Switch' : 'Change'}] ===========`);
+    const reorderTag = state.reorderMode ? ' \x1b[93m[REORDER]\x1b[0m' : '';
+    console.log(`=========== Claude API Manager [Mode: ${MODE === 'SWITCH' ? 'Switch' : 'Change'}]${reorderTag} ===========`);
     const helpText = MODE === 'CHANGE'
-        ? '[\u2191/\u2193]Move [Enter/Esc/F2] Select/Back/Rename [Ctrl+C] Exit'
-        : '[\u2191/\u2193]Move [Enter] Select [Esc] Back/Cancel [Ctrl+C] Exit';
+        ? (state.reorderMode
+            ? '[↑/↓]Swap [Enter/Esc] Done [Ctrl+C] Exit'
+            : '[↑/↓]Move [Enter/Esc/F2/m] Select/Back/Rename/Reorder [Ctrl+C] Exit')
+        : '[↑/↓]Move [Enter] Select [Esc] Back/Cancel [Ctrl+C] Exit';
     console.log(`${helpText}\n`);
+
+    // Show hint when user needs to pick a model after API switch
+    if (state.pendingSwitch) {
+        console.log('\x1b[93m>> API selected! Now choose a model from the Model List below.\x1b[0m\n');
+    }
 
     const activeStatus = getActiveConfig();
     const inModelList = isModelListIdx();
@@ -568,7 +445,7 @@ function promptText(query) {
 }
 
 async function confirmAction(message) {
-    const ans = await promptText(`\x1b[31m\u26a0\ufe0f  ${message}\x1b[0m `);
+    const ans = await promptText(`\x1b[31m⚠️  ${message}\x1b[0m `);
     if (ans === null) return false;
     const lowerAns = ans.toLowerCase();
     return ['y', 'yes'].includes(lowerAns);
@@ -627,11 +504,29 @@ async function finishApiConfig(selectedUrl) {
     if (state.isNewApi) state.rightIdx = accounts[state.leftIdx].apis.length - 1;
 
     render();
-    console.log('\n\u2705 Configuration saved to settings.txt!');
+    console.log('\n✅ Configuration saved to settings.txt!');
 
     setTimeout(() => {
         process.stdin.on('keypress', handleKeypress);
     }, 600);
+}
+
+// Complete a pending SWITCH: write settings with chosen model and exit
+function completeSwitch(modelValue, modelKey) {
+    process.stdin.removeListener('keypress', handleKeypress);
+    const ps = state.pendingSwitch;
+    let settings = {};
+    try { if (fs.existsSync(JSON_PATH)) settings = JSON.parse(fs.readFileSync(JSON_PATH, 'utf-8')); } catch (e) {}
+    if (!settings.env) settings.env = {};
+    settings.env.ANTHROPIC_BASE_URL = ps.url;
+    settings.env.ANTHROPIC_AUTH_TOKEN = ps.token;
+    settings.model = modelValue;
+    fs.writeFileSync(JSON_PATH, JSON.stringify(settings, null, 2), 'utf-8');
+    render();
+    setTimeout(() => {
+        console.log(`\n✅ Switched to: \x1b[93m[${ps.userName}] ${ps.apiName}\x1b[0m  Model: \x1b[93m${modelKey} (${modelValue})\x1b[0m  \x1b[90m${ps.url}\x1b[0m`);
+        process.exit(0);
+    }, 500);
 }
 
 async function handleKeypress(str, key) {
@@ -678,6 +573,14 @@ async function handleKeypress(str, key) {
         return;
     }
 
+    // m - Toggle reorder mode (CHANGE mode only)
+    if (key.name === 'm' && !key.ctrl && isChange && !state.pendingSwitch) {
+        state.reorderMode = !state.reorderMode;
+        if (!state.reorderMode) saveData();
+        render();
+        return;
+    }
+
     // Calculate item counts
     const leftCount = accounts.length + 2;
     let rightCount = 0;
@@ -691,6 +594,33 @@ async function handleKeypress(str, key) {
     // Up/Down
     if (key.name === 'up' || key.name === 'down') {
         const dir = key.name === 'up' ? -1 : 1;
+
+        // In reorder mode: swap items instead of just moving cursor
+        if (state.reorderMode) {
+            if (state.focus === 'LEFT' && state.leftIdx < accounts.length) {
+                const newIdx = state.leftIdx + dir;
+                if (newIdx >= 0 && newIdx < accounts.length) {
+                    [accounts[state.leftIdx], accounts[newIdx]] = [accounts[newIdx], accounts[state.leftIdx]];
+                    state.leftIdx = newIdx;
+                }
+            } else if (state.focus === 'RIGHT' && inModelList) {
+                const newIdx = state.rightIdx + dir;
+                if (newIdx >= 0 && newIdx < models.length) {
+                    [models[state.rightIdx], models[newIdx]] = [models[newIdx], models[state.rightIdx]];
+                    state.rightIdx = newIdx;
+                }
+            } else if (state.focus === 'RIGHT' && accounts[state.leftIdx]) {
+                const apis = accounts[state.leftIdx].apis;
+                const newIdx = state.rightIdx + dir;
+                if (newIdx >= 0 && newIdx < apis.length) {
+                    [apis[state.rightIdx], apis[newIdx]] = [apis[newIdx], apis[state.rightIdx]];
+                    state.rightIdx = newIdx;
+                }
+            }
+            render();
+            return;
+        }
+
         if (state.focus === 'LEFT') state.leftIdx = Math.max(0, Math.min(leftCount - 1, state.leftIdx + dir));
         if (state.focus === 'RIGHT') state.rightIdx = Math.max(0, Math.min(rightCount - 1, state.rightIdx + dir));
         if (state.focus === 'ACTION') state.actionIdx = Math.max(0, Math.min(ACTIONS.length - 1, state.actionIdx + dir));
@@ -700,6 +630,21 @@ async function handleKeypress(str, key) {
     }
 
     if (key.name === 'escape') {
+        // If reorder mode, exit and save
+        if (state.reorderMode) {
+            state.reorderMode = false;
+            saveData();
+            render();
+            return;
+        }
+        // If pending switch, Esc returns to API selection
+        if (state.pendingSwitch && state.focus === 'RIGHT' && inModelList) {
+            state.pendingSwitch = null;
+            state.focus = 'LEFT';
+            state.leftIdx = 0;
+            render();
+            return;
+        }
         if (state.focus === 'RIGHT') state.focus = 'LEFT';
         else if (state.focus === 'ACTION' || state.focus === 'URL') state.focus = 'RIGHT';
         render();
@@ -707,6 +652,14 @@ async function handleKeypress(str, key) {
     }
 
     if (key.name === 'return') {
+        // In reorder mode, Enter exits and saves
+        if (state.reorderMode) {
+            state.reorderMode = false;
+            saveData();
+            render();
+            return;
+        }
+
         if (state.focus === 'LEFT') {
             const modelListIdx = accounts.length;
             const lastIdx = accounts.length + 1;
@@ -734,18 +687,59 @@ async function handleKeypress(str, key) {
                     fs.writeFileSync(JSON_PATH, JSON.stringify(settings, null, 2), 'utf-8');
                     render();
                     setTimeout(() => {
-                        console.log(`\n\u2705 Claude OFF: Config cleared.`);
+                        console.log(`\n✅ Claude OFF: Config cleared.`);
                         process.exit(0);
                     }, 500);
                 }
             } else if (state.leftIdx === modelListIdx) {
+                // Auto-select (SWITCH only): if only 1 model, skip directly
+                if (!isChange && models.length === 1) {
+                    if (state.pendingSwitch) {
+                        completeSwitch(models[0].value, models[0].key);
+                        return;
+                    }
+                    // Standalone model switch
+                    process.stdin.removeListener('keypress', handleKeypress);
+                    let settings = {};
+                    try { if (fs.existsSync(JSON_PATH)) settings = JSON.parse(fs.readFileSync(JSON_PATH, 'utf-8')); } catch (e) {}
+                    const autoUrl = settings.env?.ANTHROPIC_BASE_URL || '';
+                    settings.model = models[0].value;
+                    fs.writeFileSync(JSON_PATH, JSON.stringify(settings, null, 2), 'utf-8');
+                    render();
+                    setTimeout(() => {
+                        console.log(`\n✅ Model switched to: \x1b[93m${models[0].key} (${models[0].value})\x1b[0m  \x1b[90m${autoUrl}\x1b[0m`);
+                        process.exit(0);
+                    }, 500);
+                    return;
+                }
                 if (models.length > 0 || isChange) {
                     state.focus = 'RIGHT';
                     state.rightIdx = 0;
                     render();
                 }
             } else if (accounts[state.leftIdx]?.apis.length > 0 || isChange) {
-                // Account
+                // Auto-select (SWITCH only): if only 1 API, skip to model list
+                if (!isChange && accounts[state.leftIdx].apis.length === 1) {
+                    const targetApi = accounts[state.leftIdx].apis[0];
+                    const { url, token } = parseConfig(targetApi.config);
+                    state.pendingSwitch = {
+                        url, token,
+                        userName: accounts[state.leftIdx].name,
+                        apiName: targetApi.name
+                    };
+                    // If only 1 model too, auto-complete
+                    if (models.length === 1) {
+                        completeSwitch(models[0].value, models[0].key);
+                        return;
+                    }
+                    // Go to Model List
+                    state.leftIdx = accounts.length;
+                    state.focus = 'RIGHT';
+                    state.rightIdx = 0;
+                    render();
+                    return;
+                }
+                // Account (multiple APIs - normal flow)
                 state.focus = 'RIGHT';
                 state.rightIdx = 0;
                 render();
@@ -765,20 +759,30 @@ async function handleKeypress(str, key) {
                     process.stdin.removeListener('keypress', handleKeypress);
                     state.rightIdx = models.length - 1;
                     render();
-                    console.log('\n\u2705 Model added!');
+                    console.log('\n✅ Model added!');
                     setTimeout(() => {
                         process.stdin.on('keypress', handleKeypress);
                     }, 600);
                 } else if (!isChange) {
-                    process.stdin.removeListener('keypress', handleKeypress);
+                    // SWITCH mode: model selected
                     const selectedModel = models[state.rightIdx];
+
+                    if (state.pendingSwitch) {
+                        // Completing a pending API switch: write both API + model
+                        completeSwitch(selectedModel.value, selectedModel.key);
+                        return;
+                    }
+
+                    // Standalone model switch (no pending API change)
+                    process.stdin.removeListener('keypress', handleKeypress);
                     let settings = {};
                     try { if (fs.existsSync(JSON_PATH)) settings = JSON.parse(fs.readFileSync(JSON_PATH, 'utf-8')); } catch (e) {}
+                    const currentUrl = settings.env?.ANTHROPIC_BASE_URL || '';
                     settings.model = selectedModel.value;
                     fs.writeFileSync(JSON_PATH, JSON.stringify(settings, null, 2), 'utf-8');
                     render();
                     setTimeout(() => {
-                        console.log(`\n\u2705 Model switched to: \x1b[93m${selectedModel.key} (${selectedModel.value})\x1b[0m`);
+                        console.log(`\n✅ Model switched to: \x1b[93m${selectedModel.key} (${selectedModel.value})\x1b[0m  \x1b[90m${currentUrl}\x1b[0m`);
                         process.exit(0);
                     }, 500);
                 } else {
@@ -792,24 +796,23 @@ async function handleKeypress(str, key) {
                 const isDeleteUserOption = isChange && state.rightIdx === apisLen + 1;
 
                 if (!isChange) {
-                    process.stdin.removeListener('keypress', handleKeypress);
+                    // SWITCH mode: API selected - save pending info, then go to model list
                     const targetApi = accounts[state.leftIdx].apis[state.rightIdx];
                     const userName = accounts[state.leftIdx].name;
                     const { url, token } = parseConfig(targetApi.config);
 
-                    let settings = {};
-                    try { if (fs.existsSync(JSON_PATH)) settings = JSON.parse(fs.readFileSync(JSON_PATH, 'utf-8')); } catch (e) {}
-                    if (!settings.env) settings.env = {};
-                    settings.env.ANTHROPIC_BASE_URL = url;
-                    settings.env.ANTHROPIC_AUTH_TOKEN = token;
-                    settings.model = getDefaultModel();
+                    state.pendingSwitch = {
+                        url: url,
+                        token: token,
+                        userName: userName,
+                        apiName: targetApi.name
+                    };
 
-                    fs.writeFileSync(JSON_PATH, JSON.stringify(settings, null, 2), 'utf-8');
+                    // Navigate to Model List
+                    state.leftIdx = accounts.length;  // Model List row
+                    state.focus = 'RIGHT';
+                    state.rightIdx = 0;
                     render();
-                    setTimeout(() => {
-                        console.log(`\n\u2705 Successfully switched to: \x1b[93m[${userName}] ${targetApi.name}\x1b[0m`);
-                        process.exit(0);
-                    }, 500);
                 } else {
                     if (isNewApiOption) {
                         await handleApiConfig(true);
@@ -822,7 +825,7 @@ async function handleKeypress(str, key) {
                             state.focus = 'LEFT';
                             state.leftIdx = Math.max(0, state.leftIdx - 1);
                         } else {
-                            console.log('\n\u274c Deletion cancelled.');
+                            console.log('\n❌ Deletion cancelled.');
                             await new Promise(r => setTimeout(r, 800));
                         }
                         render();
@@ -852,7 +855,7 @@ async function handleKeypress(str, key) {
                         saveData();
                         state.rightIdx = Math.max(0, state.rightIdx - 1);
                     } else {
-                        console.log('\n\u274c Deletion cancelled.');
+                        console.log('\n❌ Deletion cancelled.');
                         await new Promise(r => setTimeout(r, 800));
                     }
                     state.focus = 'RIGHT';
@@ -869,7 +872,7 @@ async function handleKeypress(str, key) {
                         saveData();
                         state.rightIdx = Math.max(0, state.rightIdx - 1);
                     } else {
-                        console.log('\n\u274c Deletion cancelled.');
+                        console.log('\n❌ Deletion cancelled.');
                         await new Promise(r => setTimeout(r, 800));
                     }
                     state.focus = 'RIGHT';

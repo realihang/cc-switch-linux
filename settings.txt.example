@@ -3,26 +3,11 @@ Claude Sonnet 4.5:claude-sonnet-4-5,Claude Haiku 4.5:claude-haiku-4-5
 
 #AccountName
 ##Premium API (4.75x)
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "https://your-api-endpoint.example.com/v1",
-    "ANTHROPIC_AUTH_TOKEN": "your-token-here"
-  }
-}
+https://your-api-endpoint.example.com/v1,your-token-here
 
 ##AnotherAPI (2x)
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "https://your-api-endpoint.example.com/v1",
-    "ANTHROPIC_AUTH_TOKEN": "another-token-here"
-  }
-}
+https://your-api-endpoint.example.com/v1,another-token-here
 
 #WorkAccount
 ##Premium API
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "https://another-endpoint.example.com/v1",
-    "ANTHROPIC_AUTH_TOKEN": "work-token-here"
-  }
-}
+https://another-endpoint.example.com/v1,work-token-here
